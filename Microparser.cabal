@@ -25,7 +25,6 @@ library
                       Language.MicroHs.Lex
                       Language.MicroHs.Parse
                       Text.PrettyPrint.HughesPJLite
-                      Text.PrettyPrint.HughesPJLiteClass
                       Text.ParserComb
 
     -- other-modules:

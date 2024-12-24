@@ -3,4 +3,4 @@ packages: .
 source-repository-package
     type: git
     location: https://github.com/Ei30metry/Microlude
-    tag: edf578e08cc6d88b95ba6e98da312f3a36568a70
+    tag: HEAD

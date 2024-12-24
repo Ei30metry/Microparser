@@ -22,10 +22,10 @@ import Prelude(); import Microlude hiding(head)
 import Data.Char
 import Text.PrettyPrint.HughesPJLite
 import GHC.Stack
-import MicroHs.List(dropEnd)
+import Data.List.Utils(dropEnd)
 
 import Data.Text(Text, pack, unpack, append, head)
-import Compat
+import MicroHs.Compat
 
 {-
 -- Uncomment this section, and comment out the two lines above

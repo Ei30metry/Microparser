@@ -49,6 +49,7 @@ module Language.MicroHs.Expr(
   TyVar, freeTyVars,
   getImplies,
   ) where
+import Prelude ()
 import Microlude hiding ((<>))
 import Control.Arrow(first)
 import Data.List

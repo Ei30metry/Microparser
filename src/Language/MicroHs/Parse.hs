@@ -582,7 +582,6 @@ pEqn :: (Ident -> Int -> Bool) -> P (Ident, Eqn)
 pEqn test = do
   (name, pats) <- pEqnLHS
   alts <- pAlts (pSpec '=')
-  guard (test name (length pats))
   pure (name, Eqn pats alts)
 
 pEqnLHS :: P (Ident, [EPat])

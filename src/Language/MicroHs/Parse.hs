@@ -345,7 +345,7 @@ pPatSyn = do
    ) <|> (
     do pSymbol "<-"
        p <- pPat
-       meqns <- optional (pKeyword "where" *> pBraces (pEqns' (\ n _ -> i == n)))
+       meqns <- optional (pKeyword "where" *> pBraces (pEqns' (\ n -> i == n)))
        pure (lhs, p, fmap snd meqns)
    )
 
@@ -565,9 +565,9 @@ pPatNotVar = guardM pPat isPConApp
 -------------
 
 pEqns :: P (Ident, [Eqn])
-pEqns = pEqns' (\ _ _ -> True)
+pEqns = pEqns' (\ _ -> True)
 
-pEqns' :: (Ident -> Int -> Bool) -> P (Ident, [Eqn])
+pEqns' :: (Ident -> Bool) -> P (Ident, [Eqn])
 pEqns' pfst = do
   (name, eqn@(Eqn ps alts)) <- pEqn pfst
   case (ps, alts) of
@@ -575,13 +575,14 @@ pEqns' pfst = do
       -- don't collect equations when of the form 'i = e'
       pure (name, [eqn])
     _ -> do
-      neqns <- emany (pSpec ';' *> pEqn (\ n l -> n == name && l == length ps))
+      neqns <- emany (pSpec ';' *> pEqn (\ n -> n == name))
       pure (name, eqn : map snd neqns)
 
-pEqn :: (Ident -> Int -> Bool) -> P (Ident, Eqn)
+pEqn :: (Ident -> Bool) -> P (Ident, Eqn)
 pEqn test = do
   (name, pats) <- pEqnLHS
   alts <- pAlts (pSpec '=')
+  guard (test name)
   pure (name, Eqn pats alts)
 
 pEqnLHS :: P (Ident, [EPat])

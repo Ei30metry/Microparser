@@ -3,7 +3,8 @@
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns -Wno-unused-do-bind #-}
 module Language.MicroHs.Parse(P, pTop, pTopModule
                              ,parseDie, parse, pExprTop
-                             ,keywords, pType, pExpr) where
+                             ,keywords, pType, pExpr
+                             ,pTypeTop) where
 import Prelude(); import Microlude
 import Control.Applicative
 import Control.Monad
@@ -492,6 +493,9 @@ pType = do
   vs <- pForall
   t <- pTypeOp
   pure $ if null vs then t else EForall True vs t
+
+pTypeTop :: P EType
+pTypeTop = pBraces pType <* eof
 
 pForall :: P [IdKind]
 pForall = (forallKW *> esome pIdKind <* pSymbol ".") <|< pure []

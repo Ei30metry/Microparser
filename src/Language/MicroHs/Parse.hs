@@ -1,7 +1,9 @@
 -- Copyright 2023 Lennart Augustsson
 -- See LICENSE file for full license.
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns -Wno-unused-do-bind #-}
-module Language.MicroHs.Parse(P, pTop, pTopModule, parseDie, parse, pExprTop, keywords) where
+module Language.MicroHs.Parse(P, pTop, pTopModule
+                             ,parseDie, parse, pExprTop
+                             ,keywords, pType, pExpr) where
 import Prelude(); import Microlude
 import Control.Applicative
 import Control.Monad

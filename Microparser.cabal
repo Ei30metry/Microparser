@@ -27,6 +27,9 @@ library
                       Text.PrettyPrint.HughesPJLite
                       Text.ParserComb
 
+    other-modules: MicroHs.List
+                   MicroHs.Builtin
+
     -- other-modules:
     if impl(ghc)
       build-depends: Microlude
@@ -34,6 +37,7 @@ library
                    , text
                    , pretty
                    , ghc-prim
+                   , deepseq
     if impl(mhs)
       build-depends: Microlude
 

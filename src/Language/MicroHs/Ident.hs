@@ -16,16 +16,18 @@ module Language.MicroHs.Ident(
   qualOf,
   addIdentSuffix,
   SLoc(..), noSLoc,
-  showSLoc,
+  showSLoc, slocFile,
+  isUpperX,
   ) where
-import Prelude(); import Microlude hiding(head)
+import qualified Prelude()
+import Microlude hiding ((<>), head)
 import Data.Char
 import Text.PrettyPrint.HughesPJLite
 import GHC.Stack
-import Data.List.Utils(dropEnd)
+import MicroHs.List(dropEnd)
+import Control.DeepSeq
 
 import Data.Text(Text, pack, unpack, append, head)
-import MicroHs.Compat
 
 {-
 -- Uncomment this section, and comment out the two lines above
@@ -53,6 +55,9 @@ data SLoc = SLoc FilePath Line Col
 instance Show SLoc where
   show (SLoc f l c) = show f ++ "," ++ show l ++ ":" ++ show c
 
+instance NFData SLoc where
+  rnf (SLoc a b c) = rnf a `seq` rnf b `seq` rnf c
+
 data Ident = Ident SLoc Text
   --deriving (Show)
 
@@ -68,6 +73,9 @@ instance Ord Ident where
 
 instance Show Ident where
   show = showIdent
+
+instance NFData Ident where
+  rnf (Ident a b) = rnf a `seq` rnf b
 
 slocIdent :: Ident -> SLoc
 slocIdent (Ident l _) = l
@@ -109,7 +117,7 @@ unQualString :: HasCallStack =>
                 String -> String
 unQualString [] = ""
 unQualString s@(c:_) =
-  if isUpper c then
+  if isUpperX c then
     case dropWhile (/= '.') s of
       "" -> s
       '.':r -> unQualString r
@@ -130,7 +138,7 @@ headIdent (Ident _ i) = head i
 isConIdent :: Ident -> Bool
 isConIdent i@(Ident _ t) =
   let c = headIdent i
-  in  isUpper c || c == ':' || c == ',' || t == pack "[]"  || t == pack "()" || t == pack "->"
+  in  isUpperX c || c == ':' || c == ',' || t == pack "[]"  || t == pack "()" || t == pack "->"
 
 isOperChar :: Char -> Bool
 isOperChar '@' = True
@@ -158,7 +166,7 @@ isOperChar '\x21d2' = True  -- =>
 isOperChar '\x2192' = True  -- ->
 isOperChar '\x2190' = True  -- <-
 isOperChar '\x2200' = True  -- forall
-isOperChar _ = False
+isOperChar c = not (isAscii c) && (isSymbol c || isPunctuation c)   -- Unicode operator symbols
 
 isIdentChar :: Char -> Bool
 isIdentChar c = isLower_ c || isUpper c || isDigit c || c == '\''
@@ -179,3 +187,11 @@ showSLoc (SLoc fn l c) =
     if l == 0  then "no location" else
     if l == -1 then "end-of-file" else
     "line " ++ show l ++ ", col " ++ show c
+
+slocFile :: SLoc -> FilePath
+slocFile (SLoc f _ _) = f
+
+isUpperX :: Char -> Bool
+isUpperX '\8658' = False
+isUpperX '\8594' = False
+isUpperX c = isUpper c

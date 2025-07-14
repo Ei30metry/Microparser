@@ -1,7 +1,14 @@
 -- Copyright 2023 Lennart Augustsson
 -- See LICENSE file for full license.
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns -Wno-unused-do-bind #-}
-module Language.MicroHs.Parse(P, pTop, pTopModule, parseDie, parse, pExprTop, keywords, dotDotIdent) where
+module Language.MicroHs.Parse
+  (P,
+   pTop,
+   pTopModule,
+   parseDie, parse,
+   pExprTop, pTypeTop,
+   keywords, dotDotIdent
+  ) where
 import qualified Prelude(); import Microlude hiding ((*>), (<*))
 import Control.Applicative hiding ((*>), (<*))
 import Control.Monad
@@ -558,6 +565,9 @@ pType =
       EForall q vs <$> pTypeOp
   <|>
     pTypeOp
+
+pTypeTop :: P EType
+pTypeTop = pBraces pType <* eof
 
 pForall' :: P [IdKind]
 pForall' = forallKW *> some pIdKind

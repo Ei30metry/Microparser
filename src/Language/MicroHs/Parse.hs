@@ -649,16 +649,16 @@ pPatNotVar = guardM pPat isPConApp
 
 -- Regular function definition
 pEqns :: P (Ident, [Eqn])
-pEqns = pEqns' pLIdentSym pLOper (\ _ _ -> True)
+pEqns = pEqns' pLIdentSym pLOper (\ _ -> True)
   where pLOper = guardM pOper (not . isConIdent)
 
 -- Pattern synonym function; must have name i.
 pEqnsU :: Ident -> P (Ident, [Eqn])
-pEqnsU i = pEqns' pUIdentSym pUOper (\ n _ -> i == n)
+pEqnsU i = pEqns' pUIdentSym pUOper (\ n -> i == n)
 
 -- pEqns' is used to parse oridinary function definitions as well
 -- as the 'constructor' of pattern synonyms, which has an upper case identifier.
-pEqns' :: P Ident -> P Ident -> (Ident -> Int -> Bool) -> P (Ident, [Eqn])
+pEqns' :: P Ident -> P Ident -> (Ident -> Bool) -> P (Ident, [Eqn])
 pEqns' ident oper test = do
   (name, eqn@(Eqn ps alts)) <- pEqn ident oper test
   case (ps, alts) of
@@ -666,14 +666,14 @@ pEqns' ident oper test = do
       -- don't collect equations when of the form 'i = e'
       pure (name, [eqn])
     _ -> do
-      neqns <- many (pSpec ';' *> pEqn ident oper (\ n l -> n == name && l == length ps))
+      neqns <- many (pSpec ';' *> pEqn ident oper (\ n -> n == name))
       pure (name, eqn : map snd neqns)
 
-pEqn :: P Ident -> P Ident -> (Ident -> Int -> Bool) -> P (Ident, Eqn)
+pEqn :: P Ident -> P Ident -> (Ident -> Bool) -> P (Ident, Eqn)
 pEqn ident oper test = do
   (name, pats) <- pEqnLHS ident oper
   alts <- pAlts (pSpec '=')
-  guard (test name (length pats))
+  guard (test name)
   pure (name, Eqn pats alts)
 
 pEqnLHS :: P Ident -> P Ident -> P (Ident, [EPat])

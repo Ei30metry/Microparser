@@ -18,7 +18,8 @@ data Token
   | TChar   SLoc Char             -- Char literal
   | TInt    SLoc Integer          -- Integer literal
   | TRat    SLoc Rational         -- Rational literal (i.e., decimal number)
-  | TSpec   SLoc Char             -- one of ()[]{},`<>;
+  | TSpec   SLoc String           -- one of ()[]{},`<>;
+                                  -- before the spec character.
                                   -- for synthetic {} we use <>, also
                                   --  .  for record selection
                                   --  ~  for lazy
@@ -38,9 +39,9 @@ showToken (TString _ s) = show s
 showToken (TChar _ c) = show c
 showToken (TInt _ i) = show i
 showToken (TRat _ d) = show d
-showToken (TSpec _ c) | c == '<' = "{ layout"
-                      | c == '>' = "} layout"
-                      | otherwise = [c]
+showToken (TSpec _ s) | s == "<"  = "{ layout"
+                      | s == ">"  = "} layout"
+                      | otherwise = s
 showToken (TError _ s) = s
 showToken (TBrace _) = "TBrace"
 showToken (TIndent _) = "TIndent"
@@ -67,6 +68,7 @@ getCol (SLoc _ _ c) = c
 
 -- | Take a location and string and produce a list of tokens
 lex :: SLoc -> String -> [Token]
+lex loc (' ':'@':cs) = TSpec loc "t@" : lex (addCol loc 1) cs
 lex loc (' ':cs)  = lex (addCol loc 1) cs
 lex loc ('\n':cs) = tIndent (lex (incrLine loc) cs)
 lex loc ('\r':cs) = lex loc cs
@@ -91,7 +93,7 @@ lex loc cs@(d:_) | isDigit d =
     (Left n, len, rs) -> TInt loc n : lex (addCol loc len) rs
     (Right q, len, rs) -> TRat loc q : lex (addCol loc len) rs
 lex loc ('.':cs@(d:_)) | isLower_ d =
-  TSpec loc '.' : lex (addCol loc 1) cs
+  TSpec loc "." : lex (addCol loc 1) cs
 -- Recognize #line 123 "file/name.hs"
 lex loc ('#':xcs) | (SLoc _ _ 1) <- loc, Just cs <- stripPrefix "line " xcs =
   case span (/= '\n') cs of
@@ -106,13 +108,13 @@ lex loc ('#':xcs) | (SLoc _ _ 1) <- loc, Just cs <- stripPrefix "line " xcs =
 lex loc ('!':' ':cs) =  -- ! followed by a space is always an operator
   TIdent loc [] "!" : lex (addCol loc 2) cs
 lex loc (c:cs@(d:_)) | isSpecSing c && not (isOperChar d) = -- handle reserved
-  TSpec loc c :
+  TSpec loc [c] :
     let ts = lex (addCol loc 1) cs
     in  if c == '\\' then tLam ts else ts
 lex loc (d:cs) | isOperChar d =
   case span isOperChar cs of
     (ds, rs) -> TIdent loc [] (d:ds) : lex (addCol loc $ 1 + length ds) rs
-lex loc (d:cs) | isSpec d  = TSpec loc d : lex (addCol loc 1) cs
+lex loc (d:cs) | isSpec d  = TSpec loc [d] : lex (addCol loc 1) cs
 lex loc ('"':'"':'"':cs) = lexLitStr loc (addCol loc 3) (TString loc) isTrip multiLine cs
   where isTrip ('"':'"':'"':_) = Just 3
         isTrip _ = Nothing
@@ -358,29 +360,29 @@ tIdent loc qs kw ats | elem kw ["let", "where", "do", "of"]
                                  = ti : tBrace ats
                      | otherwise = ti : ats
   where
-    isBar (TSpec _ '|' : _) = True
+    isBar (TSpec _ "|" : _) = True
     isBar _ = False
 
     ti = TIdent loc qs kw
 
 tBrace :: [Token] -> [Token]
-tBrace ts@(TSpec _ '{' : _) = ts
-tBrace ts@(TIndent _ : TSpec _ '{' : _) = ts
+tBrace ts@(TSpec _ "{" : _) = ts
+tBrace ts@(TIndent _ : TSpec _ "{" : _) = ts
 tBrace (TIndent _ : ts) = TBrace (tokensLoc ts) : ts
 tBrace ts = TBrace (tokensLoc ts) : ts
 
 tokensLoc :: [Token] -> SLoc
-tokensLoc (TIdent  loc _ _:_) = loc
-tokensLoc (TString loc _  :_) = loc
-tokensLoc (TChar   loc _  :_) = loc
-tokensLoc (TInt    loc _  :_) = loc
-tokensLoc (TRat    loc _  :_) = loc
-tokensLoc (TSpec   loc _  :_) = loc
-tokensLoc (TError  loc _  :_) = loc
-tokensLoc (TBrace  loc    :_) = loc
-tokensLoc (TIndent loc    :_) = loc
-tokensLoc (TPragma loc _  :_) = loc
-tokensLoc (TEnd    loc    :_) = loc
+tokensLoc (TIdent  loc _ _ :_) = loc
+tokensLoc (TString loc _   :_) = loc
+tokensLoc (TChar   loc _   :_) = loc
+tokensLoc (TInt    loc _   :_) = loc
+tokensLoc (TRat    loc _   :_) = loc
+tokensLoc (TSpec   loc _   :_) = loc
+tokensLoc (TError  loc _   :_) = loc
+tokensLoc (TBrace  loc     :_) = loc
+tokensLoc (TIndent loc     :_) = loc
+tokensLoc (TPragma loc _   :_) = loc
+tokensLoc (TEnd    loc     :_) = loc
 tokensLoc _                   = mkLocEOF
 
 readBase :: Integer -> String -> Integer
@@ -422,19 +424,19 @@ layoutLS                        ts          mms  Pop        =
                                                      (m:ms,_:_) | m/=0 -> (TEnd (tokensLoc ts),  LS $ layoutLS  ts     ms )
                                                      _ ->     (TError l "syntax error",  LS $ layoutLS  []     [] ) where l = tokensLoc ts
 -- The rest are the Next commands
-layoutLS tts@(TIndent x       : ts) mms@(m : ms) _ | n == m = (TSpec (tokensLoc ts) ';', LS $ layoutLS  ts    mms )
-                                                   | n <  m = (TSpec (tokensLoc ts) '>', LS $ layoutLS tts     ms ) where {n = getCol x}
+layoutLS tts@(TIndent x       : ts) mms@(m : ms) _ | n == m = (TSpec (tokensLoc ts) ";", LS $ layoutLS  ts    mms )
+                                                   | n <  m = (TSpec (tokensLoc ts) ">", LS $ layoutLS tts     ms ) where {n = getCol x}
 layoutLS     (TIndent _       : ts)          ms  _          =                                 layoutLS  ts     ms  Next
 layoutLS     (t@(TIdent _ _ "do") :  -- for NondecreasingIndentation
-              TBrace x        : ts) mms@(m :  _) _ | n >= m = (t                       , LS $ layoutLS  (TSpec (tokensLoc ts) '<' : ts) (n:mms)) where {n = getCol x}
-layoutLS     (TBrace x        : ts) mms@(m :  _) _ | n > m  = (TSpec (tokensLoc ts) '<', LS $ layoutLS  ts (n:mms)) where {n = getCol x}
-layoutLS     (TBrace x        : ts)          []  _ | n > 0  = (TSpec (tokensLoc ts) '<', LS $ layoutLS  ts     [n]) where {n = getCol x}
-layoutLS     (TBrace x        : ts)          ms  _          = (TSpec (tokensLoc ts) '<', LS $ layoutLS  (TSpec (tokensLoc ts) '>' : TIndent x : ts) ms)
-layoutLS     (t@(TSpec _ '}') : ts)     (0 : ms) _          = (                       t, LS $ layoutLS  ts     ms )
-layoutLS     (  (TSpec l '}') :  _)           _  _          = (TError l "layout error }",LS $ layoutLS  []     [] )
-layoutLS     (t@(TSpec _ '{') : ts)          ms  _          = (                       t, LS $ layoutLS  ts  (0:ms))
+              TBrace x        : ts) mms@(m :  _) _ | n >= m = (t                       , LS $ layoutLS  (TSpec (tokensLoc ts) "<" : ts) (n:mms)) where {n = getCol x}
+layoutLS     (TBrace x        : ts) mms@(m :  _) _ | n > m  = (TSpec (tokensLoc ts) "<", LS $ layoutLS  ts (n:mms)) where {n = getCol x}
+layoutLS     (TBrace x        : ts)          []  _ | n > 0  = (TSpec (tokensLoc ts) "<", LS $ layoutLS  ts     [n]) where {n = getCol x}
+layoutLS     (TBrace x        : ts)          ms  _          = (TSpec (tokensLoc ts) "<", LS $ layoutLS  (TSpec (tokensLoc ts) ">" : TIndent x : ts) ms)
+layoutLS     (t@(TSpec _ "}") : ts)     (0 : ms) _          = (                       t, LS $ layoutLS  ts     ms )
+layoutLS     (  (TSpec l "}") :  _)           _  _          = (TError l "layout error }",LS $ layoutLS  []     [] )
+layoutLS     (t@(TSpec _ "{") : ts)          ms  _          = (                       t, LS $ layoutLS  ts  (0:ms))
 layoutLS     ts@(t@(TEnd _)   :  _)          []  _          = (                       t, LS $ layoutLS  ts     [] )  -- repeat the TEnd token
-layoutLS     ts@(TEnd l       :  _)     (_ : ms) _          = (TSpec l '>'             , LS $ layoutLS  ts     ms )  -- insert '>' and try again
+layoutLS     ts@(TEnd l       :  _)     (_ : ms) _          = (TSpec l ">"             , LS $ layoutLS  ts     ms )  -- insert '>' and try again
 layoutLS     (t               : ts)          ms  _          = (                       t, LS $ layoutLS  ts     ms )
 layoutLS     []                               _  _          = error "layoutLS"
 
@@ -454,7 +456,7 @@ lexStart :: [Token] -> [Token]
 lexStart ts =
   case skip ts of
     TIdent _ [] "module" : _ -> ts
-    TSpec _ '{'          : _ -> ts
+    TSpec _ "{"        : _ -> ts
     rs                       -> TBrace (tokensLoc ts) : rs
   where skip (TIndent _ : rs) = rs
         skip rs = rs

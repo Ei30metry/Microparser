@@ -350,7 +350,7 @@ pDef :: P EDef
 pDef =
       pBind        -- Fcn, Sign, PatBind, Infix
   <|> uncurry Data <$> (pKeyword "data"     *> pData) <*> pDerivings
-  <|> Newtype      <$> (pKeyword "newtype"  *> pLHS) <*> (pSpec "=" *> (Constr [] [] <$> pUIdentSym <*> pField)) <*> pDerivings
+  <|> Newtype      <$> (pKeyword "newtype"  *> pLHS) <*> (pSpec "=" *> (MkNormalConstr [] [] <$> pUIdentSym <*> pField)) <*> pDerivings
   <|> Type         <$> (pKeyword "type"     *> pLHS) <*> (pSpec "=" *> pType)
   <|> Import       <$> (pKeyword "import"   *> pImportSpec)
   <|> ForImp       <$> (pKeyword "foreign"  *> pKeyword "import" *> pCallConv)
@@ -424,37 +424,14 @@ pGADT (n, vks) = do
       lhs = (n, map f vks)
   pKeyword "where"
   gs <- pBlock pGADTconstr
-  pure (lhs, map (dsGADT lhs) gs)
+  pure (lhs, gs)
 
-pGADTconstr :: P (Ident, [IdKind], [EConstraint], [SType], EType)
+pGADTconstr :: P Constr
 pGADTconstr = do
   cn <- pUIdentSym
   dcolon
-  es <- pForall
-  ctx <- pContext
-  args <- many (pSTypeApp <* pSymbol "->")
-  res <- pType
-  pure (cn, es, ctx, args, res)
-
-dsGADT :: LHS -> (Ident, [IdKind], [EConstraint], [SType], EType) -> Constr
-dsGADT (tnm, vks) (cnm, es, ctx, stys, rty) =
-  case getAppM rty of
-    Just (tnm', ts) | tnm == tnm' && length vks == length ts ->
-        -- Check if we can use a regular constructor
-        case zipWithM mtch vks ts of
-          -- Result type is just type variables, so use it as is
-          Just sub | not (anySame (map fst sub))
-            -> Constr es'' ctx  cnm (Left stys')
-                        where stys' = map (second $ subst sub) stys
-                              es'' = if null es then kind (freeTyVars (map snd stys) \\ map fst sub) else es
-          _ -> Constr es'  ctx' cnm (Left stys)
-      where es' = if null es then kind (freeTyVars (rty : map snd stys)) else es
-            ctx' = zipWith (\ (IdKind i _) t -> eq (EVar i) t) vks ts ++ ctx
-            eq t1 t2 = EApp (EApp (EVar (mkIdentSLoc (E.getSLoc t1) "~")) t1) t2
-            mtch (IdKind i _) (EVar i') | not (isConIdent i') = Just (i', EVar i)
-            mtch _ _ = Nothing
-            kind = map (\ i -> IdKind i (EVar dummyIdent))
-    _ -> errorMessage (E.getSLoc rty) $ "Bad GADT result type" ++ show (rty, tnm, vks)
+  ety <- pType
+  pure (MkGADTConstr cn ety)
 
 pDerivings :: P [Deriving]
 pDerivings = many pDeriving
@@ -487,8 +464,8 @@ pSLArrow :: P ()
 pSLArrow = pSymbol "<-" <|> pSymbol "\x2190"
 
 pConstr :: P Constr
-pConstr = ((\ vs ct t1 c t2 -> Constr vs ct c (Left [t1, t2])) <$> pForall <*> pContext <*> pSTypeApp <*> pUSymOper <*> pSTypeApp)
-      <|> (Constr <$> pForall <*> pContext <*> pUIdentSym <*> pFields)
+pConstr = ((\ vs ct t1 c t2 -> MkNormalConstr vs ct c (Left [t1, t2])) <$> pForall <*> pContext <*> pSTypeApp <*> pUSymOper <*> pSTypeApp)
+      <|> (MkNormalConstr <$> pForall <*> pContext <*> pUIdentSym <*> pFields)
 
 
 pFields :: P (Either [SType] [(Ident, SType)])
@@ -615,10 +592,8 @@ pTyAbs = EVar <$> pLIdentSym  <|>
 pAPat :: P EPat
 pAPat =
       (ETypeArg <$> (pSpec "t@" *> pTyAbs))
-  <|> (do
-         i <- pLIdentSym
-         (EAt i <$> (pSpec "@" *> pAPat)) <|> pure (EVar i))
-
+  <|> (do i <- pLIdentSym
+          (EAt i <$> (pSpec "@" *> pAPat)) <|> pure (EVar i))
   <|> (evar <$> pUQIdentSym <*> optional pUpdate)
   <|> pLit
   <|> (eTuple <$> (pSpec "(" *> sepBy pPat (pSpec ",") <* pSpec ")"))

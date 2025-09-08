@@ -436,14 +436,16 @@ patVars apat =
 
 type LHS = (Ident, [IdKind])
 
-data Constr = Constr
-  [IdKind] [EConstraint]          -- existentials: forall vs . ctx =>
-  Ident                           -- constructor name
-  (Either [SType] [ConstrField])  -- types or named fields
-  deriving(Show)
+data Constr = MkNormalConstr
+              [IdKind] [EConstraint]          -- existentials: forall vs . ctx =>
+              Ident                           -- constructor name
+              (Either [SType] [ConstrField])  -- types or named fields
+            | MkGADTConstr Ident EType
+  deriving Show
 
 instance NFData Constr where
-  rnf (Constr a b c d) = rnf a `seq` rnf b `seq` rnf c `seq` rnf d
+  rnf (MkNormalConstr a b c d) = rnf a `seq` rnf b `seq` rnf c `seq` rnf d
+  rnf (MkGADTConstr i t)       = rnf i `seq` rnf t
 
 type ConstrField = (Ident, SType)              -- record label and type
 type SType = (Bool, EType)                     -- the Bool indicates strict
@@ -889,7 +891,8 @@ ppEqns :: Doc -> Doc -> [Eqn] -> Doc
 ppEqns name sepr = vcat . map (\ (Eqn ps alts) -> sep [name <+> hsep (map ppEPat ps), ppAlts sepr alts])
 
 ppConstr :: Constr -> Doc
-ppConstr (Constr iks ct c cs) = ppForall QImpl iks <+> ppCtx ct <+> ppIdent c <+> ppCs cs
+ppConstr (MkGADTConstr i ety) = ppIdent i <+> text "::" <+> ppEType ety
+ppConstr (MkNormalConstr iks ct c cs) = ppForall QImpl iks <+> ppCtx ct <+> ppIdent c <+> ppCs cs
   where ppCs (Left  ts) = hsep (map ppSType ts)
         ppCs (Right fs) = braces (hsep $ map f fs)
           where f (i, t) = ppIdent i <+> text "::" <+> ppSType t <> text ","

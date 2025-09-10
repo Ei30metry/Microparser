@@ -29,6 +29,7 @@ library
 
     other-modules: MicroHs.List
                    MicroHs.Builtin
+                   Language.MicroHs.Test
 
     -- other-modules:
     if impl(ghc)

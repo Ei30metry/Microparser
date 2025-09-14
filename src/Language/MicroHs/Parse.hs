@@ -364,8 +364,8 @@ pDef =
   <|> mkPattern     <$> (pKeyword "pattern"  *> pPatSyn)
   <|> Sign          <$> (pKeyword "pattern"  *> sepBy1 pUIdentSym (pSpec ",") <* dcolon) <*> pType
   <|> StandDeriving <$> (pKeyword "deriving" *> pStrat) <*> pure 0 <*> (pKeyword "instance" *> pType)
-  <|> GammaTyCon    <$> (pKeyword "gtype"    *> pUIdent) <*> pType
-  <|> GammaDataCon  <$> (pKeyword "gdata"    *> pUIdent) <*> pType
+  <|> GammaTyCon    <$> (pKeyword "gtype"    *> pUIdent) <*> (dcolon *> pType)
+  <|> GammaDataCon  <$> (pKeyword "gdata"    *> pUIdent) <*> (dcolon *> pType)
   <|> noop          <$  (pKeyword "type"     <* pKeyword "role" <* pTypeIdentSym <*
                                                (pKeyword "nominal" <|> pKeyword "phantom" <|> pKeyword "representational"))
   where

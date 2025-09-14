@@ -349,22 +349,24 @@ pBlock p = pBraces body
 pDef :: P EDef
 pDef =
       pBind        -- Fcn, Sign, PatBind, Infix
-  <|> uncurry Data <$> (pKeyword "data"     *> pData) <*> pDerivings
-  <|> Newtype      <$> (pKeyword "newtype"  *> pLHS) <*> (pSpec "=" *> (MkNormalConstr [] [] <$> pUIdentSym <*> pField)) <*> pDerivings
-  <|> Type         <$> (pKeyword "type"     *> pLHS) <*> (pSpec "=" *> pType)
-  <|> Import       <$> (pKeyword "import"   *> pImportSpec)
-  <|> ForImp       <$> (pKeyword "foreign"  *> pKeyword "import" *> pCallConv)
-                        <*> (optional (pKeyword "unsafe") *> optional pString) <*> pLIdent <*> (dcolon *> pType)
-  <|> ForExp       <$> (pKeyword "foreign"  *> pKeyword "export" *> pCallConv)
-                        <*> optional pString <*> pFExpr <*> (dcolon *> pType)
-  <|> Class        <$> (pKeyword "class"    *> pContext) <*> pLHS <*> pFunDeps     <*> pWhere pClsBind
-  <|> Instance     <$> (pKeyword "instance" *> pType) <*> pWhere pInstBind
-  <|> Default      <$> (pKeyword "default"  *> optional clsSym) <*> pParens (sepBy pType (pSpec ","))
-  <|> KindSign     <$> (pKeyword "type"     *> pTypeIdentSym) <*> (dcolon *> pKind)
-  <|> mkPattern    <$> (pKeyword "pattern"  *> pPatSyn)
-  <|> Sign         <$> (pKeyword "pattern"  *> sepBy1 pUIdentSym (pSpec ",") <* dcolon) <*> pType
-  <|> StandDeriving<$> (pKeyword "deriving" *> pStrat) <*> pure 0 <*> (pKeyword "instance" *> pType)
-  <|> noop         <$  (pKeyword "type"     <* pKeyword "role" <* pTypeIdentSym <*
+  <|> uncurry Data  <$> (pKeyword "data"     *> pData) <*> pDerivings
+  <|> Newtype       <$> (pKeyword "newtype"  *> pLHS) <*> (pSpec "=" *> (MkNormalConstr [] [] <$> pUIdentSym <*> pField)) <*> pDerivings
+  <|> Type          <$> (pKeyword "type"     *> pLHS) <*> (pSpec "=" *> pType)
+  <|> Import        <$> (pKeyword "import"   *> pImportSpec)
+  <|> ForImp        <$> (pKeyword "foreign"  *> pKeyword "import" *> pCallConv)
+                         <*> (optional (pKeyword "unsafe") *> optional pString) <*> pLIdent <*> (dcolon *> pType)
+  <|> ForExp        <$> (pKeyword "foreign"  *> pKeyword "export" *> pCallConv)
+                         <*> optional pString <*> pFExpr <*> (dcolon *> pType)
+  <|> Class         <$> (pKeyword "class"    *> pContext) <*> pLHS <*> pFunDeps     <*> pWhere pClsBind
+  <|> Instance      <$> (pKeyword "instance" *> pType) <*> pWhere pInstBind
+  <|> Default       <$> (pKeyword "default"  *> optional clsSym) <*> pParens (sepBy pType (pSpec ","))
+  <|> KindSign      <$> (pKeyword "type"     *> pTypeIdentSym) <*> (dcolon *> pKind)
+  <|> mkPattern     <$> (pKeyword "pattern"  *> pPatSyn)
+  <|> Sign          <$> (pKeyword "pattern"  *> sepBy1 pUIdentSym (pSpec ",") <* dcolon) <*> pType
+  <|> StandDeriving <$> (pKeyword "deriving" *> pStrat) <*> pure 0 <*> (pKeyword "instance" *> pType)
+  <|> GammaTyCon    <$> (pKeyword "gtype"    *> pUIdent) <*> pType
+  <|> GammaDataCon  <$> (pKeyword "gdata"    *> pUIdent) <*> pType
+  <|> noop          <$  (pKeyword "type"     <* pKeyword "role" <* pTypeIdentSym <*
                                                (pKeyword "nominal" <|> pKeyword "phantom" <|> pKeyword "representational"))
   where
     pFunDeps = (pSpec "|" *> sepBy1 pFunDep (pSpec ",")) <|> pure []

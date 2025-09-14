@@ -94,6 +94,9 @@ data EDef
   | Pattern LHS EPat (Maybe [Eqn])
   | StandDeriving DerStrategy Int EConstraint
   | DfltSign Ident EType                      -- only in class declarations
+  | GammaTyCon Ident EType       -- HTC specific
+  | GammaDataCon Ident EType     -- HTC specific
+  | GammaPatSyn Ident Bool EType -- HTC specific
 --DEBUG  deriving (Show)
 
 instance NFData EDef where

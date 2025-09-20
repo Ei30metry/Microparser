@@ -345,7 +345,6 @@ pBlock :: forall a . P a -> P [a]
 pBlock p = pBraces body
   where body = sepBy p (some (pSpec ";")) <* optional (pSpec ";")
 
-
 pDef :: P EDef
 pDef =
       pBind        -- Fcn, Sign, PatBind, Infix
@@ -366,6 +365,7 @@ pDef =
   <|> StandDeriving <$> (pKeyword "deriving" *> pStrat) <*> pure 0 <*> (pKeyword "instance" *> pType)
   <|> GammaTyCon    <$> (pKeyword "gtype"    *> pUIdent) <*> (dcolon *> pType)
   <|> GammaDataCon  <$> (pKeyword "gdata"    *> pUIdent) <*> (dcolon *> pType)
+  <|> GammaPatSyn   <$> (pKeyword "gpat"     *> pPatDir) <*> pUIdent <*> (dcolon *> pType)
   <|> noop          <$  (pKeyword "type"     <* pKeyword "role" <* pTypeIdentSym <*
                                                (pKeyword "nominal" <|> pKeyword "phantom" <|> pKeyword "representational"))
   where
@@ -381,6 +381,11 @@ pDef =
     pStrat = (DerVia <$> (pKeyword "via" *> pAType)) <|> pSimpleStrat
 
     pFExpr = EVar <$> (pLQIdentSym <|> pUQIdentSym)
+
+    pPatDir = satisfyM "pPatDir" (\c -> case c of
+                                     TIdent _ [] "bidir"  -> Just True
+                                     TIdent _ [] "unidir" -> Just False
+                                     _                    -> Nothing)
 
 pCallConv :: P CallConv
 pCallConv = (Cccall <$ pKeyword "ccall") <|> (Ccapi <$ pKeyword "capi") <|> (Cjavascript <$ pKeyword "javascript")

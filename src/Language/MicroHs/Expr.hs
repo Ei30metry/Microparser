@@ -94,9 +94,9 @@ data EDef
   | Pattern LHS EPat (Maybe [Eqn])
   | StandDeriving DerStrategy Int EConstraint
   | DfltSign Ident EType                      -- only in class declarations
-  | GammaTyCon Ident EType       -- HTC specific
-  | GammaDataCon Ident EType     -- HTC specific
-  | GammaPatSyn Bool Ident EType -- HTC specific
+  | GammaTyCon Ident EType           -- HTC specific
+  | GammaDataCon Ident EType         -- HTC specific
+  | GammaPatSyn Bool Int Ident EType -- HTC specific
 --DEBUG  deriving (Show)
 
 instance NFData EDef where
@@ -119,7 +119,7 @@ instance NFData EDef where
   rnf (DfltSign a b) = rnf a `seq` rnf b
   rnf (GammaTyCon i ety) = rnf i `seq` rnf ety
   rnf (GammaDataCon i ety) = rnf i `seq` rnf ety
-  rnf (GammaPatSyn b i ety) = rnf b `seq` rnf i `seq` rnf ety
+  rnf (GammaPatSyn b a i ety) = rnf b `seq` rnf a `seq` rnf i `seq` rnf ety
 
 data ImpType = ImpNormal | ImpBoot
   deriving (Eq)
@@ -868,7 +868,7 @@ ppEDef def =
     DfltSign i t -> text "default" <+> ppIdent i <+> text "::" <+> ppEType t
     GammaTyCon i t -> text "gtype" <+> ppIdent i <+> text "::" <+> ppEType t
     GammaDataCon i t -> text "gdata" <+> ppIdent i <+> text "::" <+> ppEType t
-    GammaPatSyn b i t -> text "gpat" <+> text (if b then "bidir" else "unidir") <+> ppIdent i <+> text "::" <+> ppEType t
+    GammaPatSyn b a i t -> text "gpat" <+> text (if b then "bidir" else "unidir") <+> text (show a) <+> ppIdent i <+> text "::" <+> ppEType t
 
 ppDerivings :: [Deriving] -> Doc
 ppDerivings = sep . map ppDeriving

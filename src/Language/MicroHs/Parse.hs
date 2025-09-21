@@ -283,6 +283,13 @@ pLit = do
     is _ = Nothing
   satisfyM "literal" is
 
+pNum :: P Int
+pNum = do
+  satisfyM "number" is
+  where
+    is (TInt _ i) = Just (fromEnum i) -- NOTE: unsafe
+    is _          = Nothing
+
 pNumLit :: P Expr
 pNumLit = guardM pLit isNum
   where isNum (ELit _ (LInteger _)) = True
@@ -365,7 +372,7 @@ pDef =
   <|> StandDeriving <$> (pKeyword "deriving" *> pStrat) <*> pure 0 <*> (pKeyword "instance" *> pType)
   <|> GammaTyCon    <$> (pKeyword "gtype"    *> pUIdent) <*> (dcolon *> pType)
   <|> GammaDataCon  <$> (pKeyword "gdata"    *> pUIdent) <*> (dcolon *> pType)
-  <|> GammaPatSyn   <$> (pKeyword "gpat"     *> pPatDir) <*> pUIdent <*> (dcolon *> pType)
+  <|> GammaPatSyn   <$> (pKeyword "gpat"     *> pPatDir) <*> pNum <*> pUIdent <*> (dcolon *> pType)
   <|> noop          <$  (pKeyword "type"     <* pKeyword "role" <* pTypeIdentSym <*
                                                (pKeyword "nominal" <|> pKeyword "phantom" <|> pKeyword "representational"))
   where

@@ -664,9 +664,6 @@ pEqns' ident oper test = do
       neqns <- many (pSpec ";" *> pEqn ident oper (\ n -> n == name))
       pure (name, eqn : map snd neqns)
 
-pCasesArm :: P ([EPat], EAlts)
-pCasesArm = (,) <$> many pAPat <*> pAlts pSRArrow
-
 pEqn :: P Ident -> P Ident -> (Ident -> Bool) -> P (Ident, Eqn)
 pEqn ident oper test = do
   (name, pats) <- pEqnLHS ident oper
@@ -737,8 +734,8 @@ pLam = do
   loc <- getSLoc
   pSpec "\\" *>
     (    eLamWithSLoc loc <$> some pAPat <*> (pSRArrow *> pExpr)
-     <|> eLamCase loc <$> (pKeyword "case" *> pBlock pCaseArm)
      <|> eLamCases loc <$> (pKeyword "cases" *> pBlock pCasesArm)
+     <|> eLamCase loc <$> (pKeyword "case" *> pBlock pCaseArm)
     )
 
 eLamCase :: SLoc -> [ECaseArm] -> Expr
@@ -752,6 +749,9 @@ pCase = ECase <$> (pKeyword "case" *> pExpr) <*> (pKeyword "of" *> pBlock pCaseA
 
 pCaseArm :: P ECaseArm
 pCaseArm = (,) <$> pPat <*> pAlts pSRArrow
+
+pCasesArm :: P ([EPat], EAlts)
+pCasesArm =  (,) <$> many pAPat <*> pAlts pSRArrow
 
 pLet :: P Expr
 pLet = ELet <$> (pKeyword "let" *> pBlock pBind) <*> (pKeyword "in" *> pExpr)

@@ -349,10 +349,11 @@ upperIdent loc sloc qs acs =
            }
       _ -> TIdent sloc (reverse qs) ds : lex (addCol loc $ length ds) rs
 
--- For LambdaCase
+-- For LambdaCase and LambdaCases
 tLam :: [Token] -> [Token]
-tLam (t@(TIdent _ [] "case") : ts) = t : tBrace ts
-tLam ts = ts
+tLam (t@(TIdent _ [] "cases") : ts) = t : tBrace ts
+tLam (t@(TIdent _ [] "case") : ts)  = t : tBrace ts
+tLam ts                             = ts
 
 tIdent :: SLoc -> [String] -> String -> [Token] -> [Token]
 tIdent loc qs kw ats | elem kw ["let", "where", "do", "of"]

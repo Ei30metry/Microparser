@@ -26,6 +26,8 @@ eqn2   = "cons x y = x"
 dataGADT1 = "data Blah a where MkBlah1 :: Int -> Blah Int"
 dataNormal1 = "data Blah a = MkBlah1 Int | MkBlah2 String | MkBlah3 a"
 
+gammaBindings = "gamma_bindings where datag Just :: forall a. a -> Maybe a"
+
 kindSig1 = "type Maybe :: Type -> Type"
 kindSig2 = "type Foo :: forall a. a -> Type"
 
@@ -42,13 +44,20 @@ parseEqn2  = parseHsString eqn2
 parseDataGADT1 = parseDataDecls dataGADT1
 parseNormal1   = parseDataDecls dataNormal1
 
+parseGammaBindings = parseHsString
+
+lambdaCases1 = "f = \\cases Nothing -> Just (x + y)"
+lambdaCase1  = "f = \\case Just x -> Just (x + 1)"
+
 lexTests verbose
   = HP.render
   . HP.vcat
-  $ map pprTest [("tyAbs1", tyAbs1), ("tyAbs2", tyAbs2), ("tyAbs3", tyAbs3), ("tyAbs4", tyAbs4)
-                ,("tyApp1", tyApp1), ("tyApp2", tyApp2)
-                ,("asPat1", asPat1), ("asPat2", asPat2)]
+  $ map pprTest [("lambdaCases1", lambdaCases1)]
   where
+    tests = [("tyAbs1", tyAbs1), ("tyAbs2", tyAbs2), ("tyAbs3", tyAbs3), ("tyAbs4", tyAbs4)
+                ,("tyApp1", tyApp1), ("tyApp2", tyApp2)
+                ,("asPat1", asPat1), ("asPat2", asPat2)
+                ,("gammaBindings", gammaBindings)]
     pprTest (testName, test)
       = HP.text testName HP.<+>
         HP.nest 1 (HP.hcat  .
@@ -56,22 +65,29 @@ lexTests verbose
                    map (HP.text . if verbose then show else L.showToken) $
                    defaultLexer test)
 
-type ESign    = ([I.Ident], E.EType)
-type EFunBn   = (I.Ident, [E.Eqn])
-type EData    = (E.LHS, [E.Constr])
-type EKindSig = (I.Ident, E.EType)
+type ESign         = ([I.Ident], E.EType)
+type EFunBn        = (I.Ident, [E.Eqn])
+type EData         = (E.LHS, [E.Constr])
+type EKindSig      = (I.Ident, E.EType)
+type EGammaTyCon   = (I.Ident, E.EType)
+type EGammaDataCon = (I.Ident, E.EType)
 
-parseDataDecls = fmap (\(_, _, _, ds) -> ds) . parseHsString
-parseFunBinds  = fmap (\(_, _, fs, _) -> fs) . parseHsString
-parseTySigs    = fmap (\(_, ss, _, _) -> ss) . parseHsString
-parseKindSigs  = fmap (\(ks, _, _, _) -> ks) . parseHsString
+parseDataDecls = fmap (\(_, _, _, ds, _) -> ds) . parseHsString
+parseFunBinds  = fmap (\(_, _, fs, _, _) -> fs) . parseHsString
+parseTySigs    = fmap (\(_, ss, _, _, _) -> ss) . parseHsString
+parseKindSigs  = fmap (\(ks, _, _, _, _) -> ks) . parseHsString
+parseLangExts  = fmap (\(_, _, _, _, es) -> es) . parseHsString
 
+langExtFile = readFile "/Users/artin/Programming/projects/MicroHs-prelude/lib/Microparser/goldenfiles/LangExt1.txt"
 
-parseHsString :: String -> Either String ([EKindSig], [ESign], [EFunBn], [EData])
+foo = parseLangExts <$> langExtFile
+
+parseHsString :: String -> Either String ([EKindSig], [ESign], [EFunBn], [EData], [E.ELangExt])
 parseHsString str = case P.parse P.pTop "" str of
-  Left x                     -> Left x
-  Right (E.EModule _ _ defs) -> Right $ go ([], [],[], []) defs
+  Left x                          -> Left x
+  Right (E.EModule _ _ defs exts) -> Right $ (\(a, b, c, d) -> (a, b, c, d, exts)) res
     where
+      res = go ([], [], [], []) defs
       go (ks, ss, fs, cls) (E.Fcn idt eqs : ds)
         = go (ks, ss, (idt, eqs) : fs, cls) ds
       go (ks, ss, fs, cls) (E.Sign idts ety : ds)

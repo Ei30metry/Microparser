@@ -65,29 +65,33 @@ eof = do
     _      -> Control.Monad.Fail.fail "eof"
 
 pTop :: P EModule
-pTop = (pModule <|> pModuleEmpty) <* eof
+pTop = do
+  exts <- many pLangExtPragma
+  res <- pModule exts <|> pModuleEmpty exts
+  eof
+  pure res
 
-pTopModule :: P EModule
-pTopModule = pModule <* eof
+pTopModule :: [ELangExt] -> P EModule
+pTopModule exts = pModule exts <* eof
 
 pExprTop :: P Expr
 pExprTop = pBraces pExpr <* eof
 
-pModule :: P EModule
-pModule = do
+pModule :: [ELangExt] -> P EModule
+pModule exts = do
   pKeyword "module"
   mn <- pUQIdentA
   exps <- (pSpec "(" *> sepEndBy pExportItem (pSpec ",") <* pSpec ")")
       <|> pure [ExpModule mn]
   pKeyword "where"
   defs <- pBlock pDef
-  pure $ EModule mn exps defs
+  pure $ EModule mn exps defs exts
+  -- pure $ EModule (mkIdent "Main") [ExpValue $ mkIdent "main"] defs exts
 
-pModuleEmpty :: P EModule
-pModuleEmpty = do
+pModuleEmpty :: [ELangExt] -> P EModule
+pModuleEmpty exts = do
   defs <- pBlock pDef
-  --let loc = getSLoc defs
-  pure $ EModule (mkIdent "Main") [ExpValue $ mkIdent "main"] defs
+  pure $ EModule (mkIdent "Main") [ExpValue $ mkIdent "main"] defs exts
 
 -- Possibly qualified alphanumeric identifier
 pQIdent :: P Ident
@@ -320,11 +324,21 @@ pKeyword kw = void (satisfy kw is)
     is (TIdent _ [] s) = kw == s
     is _ = False
 
-pPragma :: String -> P ()
-pPragma kw = void (satisfy kw is)
+pSourcePragma :: P ()
+pSourcePragma = void (satisfy "SOURCE" is)
   where
-    is (TPragma _ s) = kw == s
+    is (TPragma _ s _) = "SOURCE" == s
     is _ = False
+
+pLangExtPragma :: P ELangExt
+pLangExtPragma = satisfyM "Language Extension" matchExt
+  where
+    matchExt (TPragma _ "LANGUAGE" (Just name)) = case name of
+        "ExtendedForallScope"   -> Just EExtendedForallScope
+        "PatternSignatureBinds" -> Just EPatternSignatureBinds
+        "DeepSubsumption"       -> Just EDeepSubsumption
+        _                       -> Nothing
+    matchExt _ = Nothing
 
 pBraces :: forall a . P a -> P a
 pBraces p =
@@ -507,7 +521,7 @@ pLHS = (,) <$> pTypeIdentSym <*> many pIdKind
 pImportSpec :: P ImportSpec
 pImportSpec =
   let
-    pSource = (ImpBoot <$ pPragma "SOURCE") <|> pure ImpNormal
+    pSource = (ImpBoot <$ pSourcePragma) <|> pure ImpNormal
     pQual = True <$ pKeyword "qualified"
     -- the 'qualified' can occur before or after the module name
     pQId =      ((,) <$> pQual <*> pUQIdentA)

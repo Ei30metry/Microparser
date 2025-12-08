@@ -4,6 +4,8 @@ module Language.MicroHs.Lex(
   LexState, lexTopLS,
   popLayout, lex,
   readInt,
+  pragma,
+  skipNest,
   ) where
 import qualified Prelude(); import Microlude hiding(lex)
 import Data.Char
@@ -13,22 +15,22 @@ import Language.MicroHs.Ident
 import Text.ParserComb(TokenMachine(..))
 
 data Token
-  = TIdent  SLoc [String] String  -- identifier
-  | TString SLoc String           -- String literal
-  | TChar   SLoc Char             -- Char literal
-  | TInt    SLoc Integer          -- Integer literal
-  | TRat    SLoc Rational         -- Rational literal (i.e., decimal number)
-  | TSpec   SLoc String           -- one of ()[]{},`<>;
-                                  -- before the spec character.
-                                  -- for synthetic {} we use <>, also
-                                  --  .  for record selection
-                                  --  ~  for lazy
-                                  --  !  for strict
-                                  --  NOT YET  @  for type app
-  | TError  SLoc String           -- lexical error
-  | TBrace  SLoc                  -- {n} in the Haskell report
-  | TIndent SLoc                  -- <n> in the Haskell report
-  | TPragma SLoc String           -- a {-# PRAGMA #-}
+  = TIdent  SLoc [String] String       -- identifier
+  | TString SLoc String                -- String literal
+  | TChar   SLoc Char                  -- Char literal
+  | TInt    SLoc Integer               -- Integer literal
+  | TRat    SLoc Rational              -- Rational literal (i.e., decimal number)
+  | TSpec   SLoc String                -- one of ()[]{},`<>;
+                                       -- before the spec character.
+                                       -- for synthetic {} we use <>, also
+                                       --  .  for record selection
+                                       --  ~  for lazy
+                                       --  !  for strict
+                                       --  NOT YET  @  for type app
+  | TError  SLoc String                -- lexical error
+  | TBrace  SLoc                       -- {n} in the Haskell report
+  | TIndent SLoc                       -- <n> in the Haskell report
+  | TPragma SLoc String (Maybe String) -- a {-# PRAGMA #-}
   | TEnd    SLoc
   | TRaw [Token]
   deriving (Show)
@@ -45,7 +47,9 @@ showToken (TSpec _ s) | s == "<"  = "{ layout"
 showToken (TError _ s) = s
 showToken (TBrace _) = "TBrace"
 showToken (TIndent _) = "TIndent"
-showToken (TPragma _ s) = "{-# " ++ s ++ " #-}"
+showToken (TPragma _ s1 s2) = case s2 of
+  Nothing -> "{-# " ++ s1 ++ " #-}"
+  Just x  -> "{-# " ++ s1 ++ " " ++ x ++ " #-}"
 showToken (TEnd _) = "EOF"
 showToken (TRaw _) = "TRaw"
 
@@ -382,7 +386,7 @@ tokensLoc (TSpec   loc _   :_) = loc
 tokensLoc (TError  loc _   :_) = loc
 tokensLoc (TBrace  loc     :_) = loc
 tokensLoc (TIndent loc     :_) = loc
-tokensLoc (TPragma loc _   :_) = loc
+tokensLoc (TPragma loc _ _ :_) = loc
 tokensLoc (TEnd    loc     :_) = loc
 tokensLoc _                   = mkLocEOF
 
@@ -395,11 +399,19 @@ readInt = fromInteger . readBase 10
 -- XXX This is a pretty hacky recognition of pragmas.
 pragma :: SLoc -> [Char] -> [Token]
 pragma loc cs =
-  let as = map toUpper $ takeWhile isAlpha $ dropWhile isSpace cs
-      skip = skipNest loc 1 ('#':cs)
-  in  case as of
-        "SOURCE" -> TPragma loc as : skip
-        _ -> skip
+  let (as, rest) = span isAlpha $ dropWhile isSpace cs
+      as'        = map toUpper as
+      skip       = skipNest loc 1 ('#':cs)
+      pr
+        | as' == "SOURCE"
+        = TPragma loc as Nothing : skip
+
+        | as' == "LANGUAGE"
+        = TPragma loc "LANGUAGE" (Just (takeWhile isAlpha (dropWhile isSpace rest))) : skip
+
+        | otherwise
+        = skip
+  in pr
 
 -- | This is the magical layout resolver, straight from the Haskell report.
 -- https://www.haskell.org/onlinereport/haskell2010/haskellch10.html#x17-17800010.3
@@ -452,15 +464,28 @@ instance TokenMachine LexState Token where
 popLayout :: LexState -> LexState
 popLayout (LS f) = snd (f Pop)
 
+lexLangPragmas :: [Token] -> ([Token], [Token])
+lexLangPragmas ts = go [] ts
+  where
+    go :: [Token] -> [Token] -> ([Token], [Token])
+    go prs (t@(TPragma _ _ _) : rest) = go (t : prs) rest
+    go prs (TIndent _ : rest)       = go prs rest
+    go prs rest                     = (prs, rest)
+
 -- Insert TBrace if no 'module'/'{'
 lexStart :: [Token] -> [Token]
 lexStart ts =
-  case skip ts of
+  case skip rest of
     TIdent _ [] "module" : _ -> ts
-    TSpec _ "{"        : _ -> ts
-    rs                       -> TBrace (tokensLoc ts) : rs
+    TSpec _ "{"          : _ -> concatIfPragmas ts
+    rs                       -> concatIfPragmas (TBrace (tokensLoc ts) : rs)
   where skip (TIndent _ : rs) = rs
         skip rs = rs
+        (pragmas, rest) = lexLangPragmas ts
+
+        concatIfPragmas
+          | null pragmas = id
+          | otherwise    = (pragmas ++)
 
 lexTopLS :: FilePath -> String -> LexState
 lexTopLS f s = LS $ layoutLS (lexStart $ lex (SLoc f 1 1) s) []

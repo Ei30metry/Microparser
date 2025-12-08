@@ -1,6 +1,7 @@
 module Language.MicroHs.Expr(
   IdentModule,
   EModule(..),
+  ELangExt(..),
   ExportItem(..),
   ImportSpec(..),
   ImportItem(..),
@@ -66,7 +67,13 @@ type IdentModule = Ident
 
 ----------------------
 
-data EModule = EModule IdentModule [ExportItem] [EDef]
+data ELangExt
+  = EExtendedForallScope
+  | EPatternSignatureBinds
+  | EDeepSubsumption
+  deriving Show
+
+data EModule = EModule IdentModule [ExportItem] [EDef] [ELangExt]
 --DEBUG  deriving (Show)
 
 data ExportItem
@@ -796,7 +803,7 @@ errorMessage loc msg = error $ showSLoc loc ++ ": " ++ msg
 ----------------
 
 instance Show EModule where
-  show (EModule nm _ ds) = "module " ++ showIdent nm ++ "(...) where\n" ++ showEDefs ds
+  show (EModule nm _ ds _) = "module " ++ showIdent nm ++ "(...) where\n" ++ showEDefs ds
 
 instance Show Expr where
   show = showExpr

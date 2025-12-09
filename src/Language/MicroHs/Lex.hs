@@ -443,7 +443,7 @@ layoutLS     (TIndent _       : ts)          ms  _          =                   
 layoutLS     (t@(TIdent _ _ "do") :  -- for NondecreasingIndentation
               TBrace x        : ts) mms@(m :  _) _ | n >= m = (t                       , LS $ layoutLS  (TSpec (tokensLoc ts) "<" : ts) (n:mms)) where {n = getCol x}
 layoutLS     (TBrace x        : ts) mms@(m :  _) _ | n > m  = (TSpec (tokensLoc ts) "<", LS $ layoutLS  ts (n:mms)) where {n = getCol x}
-layoutLS     (TBrace x        : ts)          []  _ | n > 0  = (TSpec (tokensLoc ts) "<", LS $ layoutLS  ts     [n]) where {n = getCol x}
+layoutLS     (TBrace x        : ts)          []  _ | n > 0  = (TSpec (tokensLoc ts) "<", LS $ layoutLS  ts     [1]) where {n = getCol x}
 layoutLS     (TBrace x        : ts)          ms  _          = (TSpec (tokensLoc ts) "<", LS $ layoutLS  (TSpec (tokensLoc ts) ">" : TIndent x : ts) ms)
 layoutLS     (t@(TSpec _ "}") : ts)     (0 : ms) _          = (                       t, LS $ layoutLS  ts     ms )
 layoutLS     (  (TSpec l "}") :  _)           _  _          = (TError l "layout error }",LS $ layoutLS  []     [] )

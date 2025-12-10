@@ -24,11 +24,11 @@ library
                       Language.MicroHs.Ident
                       Language.MicroHs.Lex
                       Language.MicroHs.Parse
+                      MicroHs.Builtin
                       Text.PrettyPrint.HughesPJLite
                       Text.ParserComb
 
     other-modules: MicroHs.List
-                   MicroHs.Builtin
                    Language.MicroHs.Test
 
     -- other-modules:

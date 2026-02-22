@@ -1,0 +1,13 @@
+{-# LANGUAGE ExtendedForallScope #-}
+
+-- module Foo where
+
+scopedId :: forall a. a -> a
+scopedId x
+  = let
+      y = id x
+    in y
+
+f = x
+
+foo = undefined

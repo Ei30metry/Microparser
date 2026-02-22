@@ -1,0 +1,5 @@
+data Blah a where
+  MkBlah1 :: Int -> Blah Int
+  MkBlah2 :: String -> Foo -> Blah String
+  MkBlah3 :: forall a. a -> Blah a
+  MkBlah4 :: forall b. b -> Blah Int

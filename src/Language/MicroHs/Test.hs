@@ -70,33 +70,41 @@ type EFunBn        = (I.Ident, [E.Eqn])
 type EData         = (E.LHS, [E.Constr])
 type EKindSig      = (I.Ident, E.EType)
 type EGammaTyCon   = (I.Ident, E.EType)
-type EGammaDataCon = (I.Ident, E.EType)
+type EGammaDatacon = (I.Ident, E.EType)
+type EGammaPatSyn  = (I.Ident, (Bool, Int, E.EType))
 
-parseDataDecls = fmap (\(_, _, _, ds, _) -> ds) . parseHsString
-parseFunBinds  = fmap (\(_, _, fs, _, _) -> fs) . parseHsString
-parseTySigs    = fmap (\(_, ss, _, _, _) -> ss) . parseHsString
-parseKindSigs  = fmap (\(ks, _, _, _, _) -> ks) . parseHsString
-parseLangExts  = fmap (\(_, _, _, _, es) -> es) . parseHsString
+parseDataDecls = fmap (\(_, _, _, ds, _, _) -> ds) . parseHsString
+parseFunBinds  = fmap (\(_, _, fs, _, _, _) -> fs) . parseHsString
+parseTySigs    = fmap (\(_, ss, _, _, _, _) -> ss) . parseHsString
+parseKindSigs  = fmap (\(ks, _, _, _, _, _) -> ks) . parseHsString
+parseLangExts  = fmap (\(_, _, _, _, _, es) -> es) . parseHsString
+parseGPatSyns  = fmap (\(_, _, _, _, ps, _) -> ps) . parseHsString
 
 langExtFile = readFile "/Users/artin/Programming/projects/MicroHs-prelude/lib/Microparser/goldenfiles/LangExt1.txt"
 
 foo = parseLangExts <$> langExtFile
 
-parseHsString :: String -> Either String ([EKindSig], [ESign], [EFunBn], [EData], [E.ELangExt])
+parseHsString :: String
+              -> Either String ([EKindSig]
+                               ,[ESign]
+                               ,[EFunBn]
+                               ,[EData]
+                               ,[EGammaPatSyn]
+                               ,[E.ELangExt])
 parseHsString str = case P.parse P.pTop "" str of
   Left x                          -> Left x
-  Right (E.EModule _ _ defs exts) -> Right $ (\(a, b, c, d) -> (a, b, c, d, exts)) res
+  Right (E.EModule _ _ defs exts) -> Right $ (\(ks, ss, fs, cls, ps) -> (ks, ss, fs, cls, ps, exts)) res
     where
-      res = go ([], [], [], []) defs
-      go (ks, ss, fs, cls) (E.Fcn idt eqs : ds)
-        = go (ks, ss, (idt, eqs) : fs, cls) ds
-      go (ks, ss, fs, cls) (E.Sign idts ety : ds)
-        = go (ks, (idts, ety) : ss, fs, cls) ds
-      go (ks, ss, fs, cls) (E.Data lhs rhs _ : ds)
-        = go (ks, ss, fs, (lhs, rhs) : cls) ds
-      go (ks, ss, fs, cls) (E.KindSign ident ty : ds)
-        = go ((ident, ty) : ks, ss, fs, cls)ds
-      go (ks, ss, fs, cls) (_ : ds)
-        = go (ks, ss, fs, cls) ds
-      go acc []
-        = acc
+      res = go ([], [], [], [], []) defs
+      go (ks, ss, fs, cls, ps) (E.Fcn idt eqs:ds) =
+        go (ks, ss, (idt, eqs) : fs, cls, ps) ds
+      go (ks, ss, fs, cls, ps) (E.Sign idts ety:ds) =
+        go (ks, (idts, ety) : ss, fs, cls, ps) ds
+      go (ks, ss, fs, cls, ps) (E.Data lhs rhs _:ds) =
+        go (ks, ss, fs, (lhs, rhs) : cls, ps) ds
+      go (ks, ss, fs, cls, ps) (E.KindSign ident ty:ds) =
+        go ((ident, ty) : ks, ss, fs, cls, ps) ds
+      go (ks, ss, fs, cls, ps) (E.GammaPatSyn dir arity ident typ:ds) =
+        go (ks, ss, fs, cls, (ident, (dir, arity, typ)) : ps) ds
+      go (ks, ss, fs, cls, ps) (_:ds) = go (ks, ss, fs, cls, ps) ds
+      go acc [] = acc

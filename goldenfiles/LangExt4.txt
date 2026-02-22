@@ -1,0 +1,4 @@
+{-# LANGUAGE ExtendedForallScope #-}
+
+f :: Int
+f = undefined

@@ -1,0 +1,6 @@
+{-# LANGUAGE ExtendedForallScope #-}
+{-# LANGUAGE PatternSignatureBinds #-}
+
+-- module Foo where
+
+f = b

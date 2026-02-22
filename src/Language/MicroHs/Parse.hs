@@ -195,7 +195,8 @@ keywords :: [String]
 keywords =
   ["_primitive", "case", "class", "data", "default", "deriving", "do", "else", "forall", "foreign", "if",
    "import", "in", "infix", "infixl", "infixr", "instance",
-   "let", "module", "newtype", "of", "pattern", "then", "type", "where"]
+   "let", "module", "newtype", "of", "pattern", "then", "type", "where", "gdata",
+   "gtype", "gpat"]
 
 pSpec :: String -> P ()
 pSpec s = void (satisfy (showToken $ TSpec (SLoc "" 0 0) s) is)
@@ -563,13 +564,13 @@ pKind = pType
 -- Including '->' in pExprOp interacts poorly with '->'
 -- in lambda and 'case'.
 pType :: P EType
-pType =
-    do
-      vs <- pForall'
-      q <- (QExpl <$ pSymbol ".") <|> (QReqd <$ pSymbol "->")
-      EForall q vs <$> pTypeOp
-  <|>
-    pTypeOp
+pType = pExplicitQuant <|> pTypeOp
+
+pExplicitQuant :: P EType
+pExplicitQuant = do
+  vs <- pForall'
+  q <- (QExpl <$ pSymbol ".") <|> (QReqd <$ pSymbol "->")
+  EForall q vs <$> pTypeOp
 
 pTypeTop :: P EType
 pTypeTop = pBraces pType <* eof
@@ -603,6 +604,7 @@ pAType =
   <|> pLit
   <|> (eTuple <$> (pSpec "(" *> sepBy pType (pSpec ",") <* pSpec ")"))
   <|> (EListish . LList . (:[]) <$> (pSpec "[" *> pType <* pSpec "]"))  -- Unlike expressions, only allow a single element.
+  -- <|> pExplicitQuant
 
 -------------
 -- Patterns
@@ -621,7 +623,7 @@ pAPat :: P EPat
 pAPat =
       (ETypeArg <$> (pSpec "t@" *> pTyAbs))
   <|> (do i <- pLIdentSym
-          (EAt i <$> (pSpec "@" *> pAPat)) <|> pure (EVar i))
+          EAt i <$> (pSpec "@" *> pAPat) <|> pure (EVar i))
   <|> (evar <$> pUQIdentSym <*> optional pUpdate)
   <|> pLit
   <|> (eTuple <$> (pSpec "(" *> sepBy pPat (pSpec ",") <* pSpec ")"))

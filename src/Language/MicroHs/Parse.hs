@@ -604,7 +604,7 @@ pAType =
   <|> pLit
   <|> (eTuple <$> (pSpec "(" *> sepBy pType (pSpec ",") <* pSpec ")"))
   <|> (EListish . LList . (:[]) <$> (pSpec "[" *> pType <* pSpec "]"))  -- Unlike expressions, only allow a single element.
-  -- <|> pExplicitQuant
+  <|> pExplicitQuant
 
 -------------
 -- Patterns

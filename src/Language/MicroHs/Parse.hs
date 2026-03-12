@@ -367,6 +367,11 @@ pBlock :: forall a . P a -> P [a]
 pBlock p = pBraces body
   where body = sepBy p (some (pSpec ";")) <* optional (pSpec ";")
 
+pBlock1 :: forall a. P a -> P [a]
+pBlock1 p = pBraces body
+  where
+    body = sepBy1 p (some (pSpec ";")) <* optional (pSpec ";")
+
 pDef :: P EDef
 pDef =
       pBind        -- Fcn, Sign, PatBind, Infix
@@ -418,7 +423,7 @@ pPatSyn = do
   ( do pSpec "=";
        p <- pPat
        guard (isExp p)
-       let eqn = eEqn (map (EVar . idKindIdent) vs) p
+       let eqn = eEqn 1 (map (EVar . idKindIdent) vs) p -- TODO: Artin: Is this right?
        pure (lhs, p, Just [eqn])
    ) <|> (
     do pSymbol "<-"
@@ -671,7 +676,7 @@ pEqnsU i = pEqns' pUIdentSym pUOper (\ n -> i == n)
 -- as the 'constructor' of pattern synonyms, which has an upper case identifier.
 pEqns' :: P Ident -> P Ident -> (Ident -> Bool) -> P (Ident, [Eqn])
 pEqns' ident oper test = do
-  (name, eqn@(Eqn ps alts)) <- pEqn ident oper test
+  (name, eqn@(Eqn _ ps alts)) <- pEqn ident oper test
   case (ps, alts) of
     ([], EAlts [_] []) ->
       -- don't collect equations when of the form 'i = e'
@@ -685,7 +690,7 @@ pEqn ident oper test = do
   (name, pats) <- pEqnLHS ident oper
   alts <- pAlts (pSpec "=")
   guard (test name)
-  pure (name, Eqn pats alts)
+  pure (name, Eqn (length pats) pats alts)
 
 pEqnLHS :: P Ident -> P Ident -> P (Ident, [EPat])
 pEqnLHS ident oper =
@@ -750,15 +755,15 @@ pLam = do
   loc <- getSLoc
   pSpec "\\" *>
     (    eLamWithSLoc loc <$> some pAPat <*> (pSRArrow *> pExpr)
-     <|> eLamCases loc <$> (pKeyword "cases" *> pBlock pCasesArm)
+     <|> eLamCases loc <$> (pKeyword "cases" *> pBlock1 pCasesArm)
      <|> eLamCase loc <$> (pKeyword "case" *> pBlock pCaseArm)
     )
 
 eLamCase :: SLoc -> [ECaseArm] -> Expr
-eLamCase loc as = ELam loc [ Eqn [p] a | (p, a) <- as ]
+eLamCase loc as = ELam loc [ Eqn 1 [p] a | (p, a) <- as ]
 
 eLamCases :: SLoc -> [([EPat], EAlts)] -> Expr
-eLamCases loc as = ELam loc [ Eqn ps a | (ps, a) <- as ]
+eLamCases loc as = ELam loc [ Eqn (length ps) ps a | (ps, a) <- as ]
 
 pCase :: P Expr
 pCase = ECase <$> (pKeyword "case" *> pExpr) <*> (pKeyword "of" *> pBlock pCaseArm)
@@ -767,7 +772,7 @@ pCaseArm :: P ECaseArm
 pCaseArm = (,) <$> pPat <*> pAlts pSRArrow
 
 pCasesArm :: P ([EPat], EAlts)
-pCasesArm =  (,) <$> many pAPat <*> pAlts pSRArrow
+pCasesArm = (,) <$> many pAPat <*> pAlts pSRArrow
 
 pLet :: P Expr
 pLet = ELet <$> (pKeyword "let" *> pBlock pBind) <*> (pKeyword "in" *> pExpr)

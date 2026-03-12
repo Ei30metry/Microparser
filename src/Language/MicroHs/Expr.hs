@@ -266,10 +266,10 @@ eLamWithSLoc :: SLoc -> [EPat] -> Expr -> Expr
 eLamWithSLoc loc ps e = ELam loc $ eEqns ps e
 
 eEqns :: [EPat] -> Expr -> [Eqn]
-eEqns ps e = [eEqn ps e]
+eEqns ps e = [eEqn (length ps) ps e]
 
-eEqn :: [EPat] -> Expr -> Eqn
-eEqn ps e = Eqn ps (EAlts [([], e)] [])
+eEqn :: Arity -> [EPat] -> Expr -> Eqn
+eEqn ar ps e = Eqn ar ps (EAlts [([], e)] [])
 
 type FieldName = Ident
 
@@ -395,12 +395,14 @@ instance NFData EStmt where
 
 type EBind = EDef   -- subset with Fcn, PatBind, Sign, and DfltSign
 
+type Arity = Int
+
 -- A single equation for a function
-data Eqn = Eqn [EPat] EAlts
+data Eqn = Eqn Arity [EPat] EAlts
 --DEBUG  deriving (Show)
 
 instance NFData Eqn where
-  rnf (Eqn a b) = rnf a `seq` rnf b
+  rnf (Eqn _ a b) = rnf a `seq` rnf b
 
 data EAlts = EAlts [EAlt] [EBind]
 --DEBUG  deriving (Show)
@@ -613,8 +615,8 @@ instance HasLoc EStmt where
   getSLoc (SLet bs) = getSLoc bs
 
 instance HasLoc Eqn where
-  getSLoc (Eqn [] a) = getSLoc a
-  getSLoc (Eqn (p:_) _) = getSLoc p
+  getSLoc (Eqn _ [] a) = getSLoc a
+  getSLoc (Eqn _ (p:_) _) = getSLoc p
 
 instance HasLoc EAlts where
   getSLoc (EAlts as _) = getSLoc as
@@ -714,7 +716,7 @@ allVarsEqns eqns = composeMap allVarsEqn eqns []
 allVarsEqn :: Eqn -> DList Ident
 allVarsEqn eqn =
   case eqn of
-    Eqn ps alts -> composeMap allVarsPat ps . allVarsAlts alts
+    Eqn _ ps alts -> composeMap allVarsPat ps . allVarsAlts alts
 
 allVarsAlts :: EAlts -> DList Ident
 allVarsAlts (EAlts alts bs) = composeMap allVarsAlt alts . composeMap allVarsBind' bs
@@ -904,7 +906,7 @@ ppFunDeps fds =
   text "|" <+> hsep (punctuate (text ",") (map (\ (is, os) -> hsep (map ppIdent is) <+> text "-" <+> hsep (map ppIdent os)) fds))
 
 ppEqns :: Doc -> Doc -> [Eqn] -> Doc
-ppEqns name sepr = vcat . map (\ (Eqn ps alts) -> sep [name <+> hsep (map ppEPat ps), ppAlts sepr alts])
+ppEqns name sepr = vcat . map (\ (Eqn _ ps alts) -> sep [name <+> hsep (map ppEPat ps), ppAlts sepr alts])
 
 ppConstr :: Constr -> Doc
 ppConstr (MkGADTConstr i ety) = ppIdent i <+> text "::" <+> ppEType ety

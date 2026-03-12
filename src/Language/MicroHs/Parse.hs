@@ -417,19 +417,20 @@ pDef =
 pCallConv :: P CallConv
 pCallConv = (Cccall <$ pKeyword "ccall") <|> (Ccapi <$ pKeyword "capi") <|> (Cjavascript <$ pKeyword "javascript")
 
-pPatSyn :: P (LHS, EPat, Maybe [Eqn])
+pPatSyn :: P (LHS, EPat, Maybe Eqns)
 pPatSyn = do
   lhs@(i, vs) <- pLHS
   ( do pSpec "=";
        p <- pPat
        guard (isExp p)
-       let eqn = eEqn 1 (map (EVar . idKindIdent) vs) p -- TODO: Artin: Is this right?
-       pure (lhs, p, Just [eqn])
+       let eqn = eEqn (map (EVar . idKindIdent) vs) p -- TODO: Artin: Is this right?
+           eqns = Eqns ArityN [eqn]
+       pure (lhs, p, Just eqns)
    ) <|> (
     do pSymbol "<-"
        p <- pPat
        meqns <- optional (pKeyword "where" *> pBraces (pEqnsU i))
-       pure (lhs, p, fmap snd meqns)
+       pure (lhs, p, fmap (Eqns ArityN . snd) meqns)
    )
 
 dcolon :: P ()
@@ -676,7 +677,7 @@ pEqnsU i = pEqns' pUIdentSym pUOper (\ n -> i == n)
 -- as the 'constructor' of pattern synonyms, which has an upper case identifier.
 pEqns' :: P Ident -> P Ident -> (Ident -> Bool) -> P (Ident, [Eqn])
 pEqns' ident oper test = do
-  (name, eqn@(Eqn _ ps alts)) <- pEqn ident oper test
+  (name, eqn@(Eqn ps alts)) <- pEqn ident oper test
   case (ps, alts) of
     ([], EAlts [_] []) ->
       -- don't collect equations when of the form 'i = e'
@@ -690,7 +691,7 @@ pEqn ident oper test = do
   (name, pats) <- pEqnLHS ident oper
   alts <- pAlts (pSpec "=")
   guard (test name)
-  pure (name, Eqn (length pats) pats alts)
+  pure (name, Eqn pats alts)
 
 pEqnLHS :: P Ident -> P Ident -> P (Ident, [EPat])
 pEqnLHS ident oper =
@@ -754,16 +755,16 @@ pLam :: P Expr
 pLam = do
   loc <- getSLoc
   pSpec "\\" *>
-    (    eLamWithSLoc loc <$> some pAPat <*> (pSRArrow *> pExpr)
+    (    eLamWithSLoc loc ArityN <$> some pAPat <*> (pSRArrow *> pExpr)
      <|> eLamCases loc <$> (pKeyword "cases" *> pBlock1 pCasesArm)
      <|> eLamCase loc <$> (pKeyword "case" *> pBlock pCaseArm)
     )
 
 eLamCase :: SLoc -> [ECaseArm] -> Expr
-eLamCase loc as = ELam loc [ Eqn 1 [p] a | (p, a) <- as ]
+eLamCase loc as = ELam loc (Eqns ArityOne [ Eqn [p] a | (p, a) <- as ])
 
 eLamCases :: SLoc -> [([EPat], EAlts)] -> Expr
-eLamCases loc as = ELam loc [ Eqn (length ps) ps a | (ps, a) <- as ]
+eLamCases loc as = ELam loc (Eqns ArityN [ Eqn ps a | (ps, a) <- as ])
 
 pCase :: P Expr
 pCase = ECase <$> (pKeyword "case" *> pExpr) <*> (pKeyword "of" *> pBlock pCaseArm)
@@ -890,7 +891,7 @@ pBind =
 -- Bindings allowed in top level, let, class
 pBind' :: P EBind
 pBind' =
-      uncurry Fcn <$> pEqns
+      (\(idt, eqs) -> Fcn idt (Eqns ArityN eqs)) <$> pEqns
   <|> Sign        <$> (sepBy1 pLIdentSym (pSpec ",") <* dcolon) <*> pType
   <|> Infix       <$> ((,) <$> pAssoc <*> pPrec) <*> sepBy1 pTypeOper (pSpec ",")
   where
@@ -908,7 +909,7 @@ pClsBind =
 -- Bindings allowed in an instance definition
 pInstBind :: P EBind
 pInstBind =
-      uncurry Fcn <$> pEqns
+      (\(idt, eqs) -> Fcn idt (Eqns ArityN eqs)) <$> pEqns
   <|> Sign        <$> (sepBy1 pLIdentSym (pSpec ",") <* dcolon) <*> pType
 
 -------------

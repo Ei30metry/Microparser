@@ -17,6 +17,8 @@ module Language.MicroHs.Expr(
   CType(..),
   EBind, showEBind, showEBinds,
   Eqn(..),
+  Eqns(..),
+  EqnArity(..),
   EStmt(..),
   EAlts(..),
   EField(..), unEField,
@@ -87,7 +89,7 @@ data EDef
   = Data LHS [Constr] [Deriving]
   | Newtype LHS Constr [Deriving]
   | Type LHS EType
-  | Fcn Ident [Eqn]
+  | Fcn Ident Eqns
   | PatBind EPat Expr
   | Sign [Ident] EType
   | KindSign Ident EKind
@@ -98,7 +100,7 @@ data EDef
   | Class [EConstraint] LHS [FunDep] [EBind]  -- XXX will probable need initial forall with FD
   | Instance EConstraint [EBind]
   | Default (Maybe Ident) [EType]
-  | Pattern LHS EPat (Maybe [Eqn])
+  | Pattern LHS EPat (Maybe Eqns)
   | StandDeriving DerStrategy Int EConstraint
   | DfltSign Ident EType                      -- only in class declarations
   | GammaTyCon Ident EType           -- HTC specific
@@ -176,7 +178,7 @@ data Expr
   = EVar Ident
   | EApp Expr Expr
   | EOper Expr [(Ident, Expr)]
-  | ELam SLoc [Eqn]
+  | ELam SLoc Eqns
   | ELit SLoc Lit
   | ECase Expr [ECaseArm]
   | ELet [EBind] Expr
@@ -259,17 +261,20 @@ unEField _ = impossible
 
 type FunDep = ([Ident], [Ident])
 
-eLam :: [EPat] -> Expr -> Expr
+eLam :: EqnArity -> [EPat] -> Expr -> Expr
 eLam = eLamWithSLoc noSLoc
 
-eLamWithSLoc :: SLoc -> [EPat] -> Expr -> Expr
-eLamWithSLoc loc ps e = ELam loc $ eEqns ps e
+eLamWithSLoc :: SLoc -> EqnArity -> [EPat] -> Expr -> Expr
+eLamWithSLoc loc ar ps e = ELam loc $ eEqns ar ps e
 
-eEqns :: [EPat] -> Expr -> [Eqn]
-eEqns ps e = [eEqn (length ps) ps e]
+eEqns :: EqnArity -> [EPat] -> Expr -> Eqns
+eEqns ar ps e = Eqns ar [eEqn ps e]
 
-eEqn :: Arity -> [EPat] -> Expr -> Eqn
-eEqn ar ps e = Eqn ar ps (EAlts [([], e)] [])
+unEqns :: Eqns -> (EqnArity, [Eqn])
+unEqns (Eqns ar eqs) = (ar, eqs)
+
+eEqn :: [EPat] -> Expr -> Eqn
+eEqn ps e = Eqn ps (EAlts [([], e)] [])
 
 type FieldName = Ident
 
@@ -395,14 +400,20 @@ instance NFData EStmt where
 
 type EBind = EDef   -- subset with Fcn, PatBind, Sign, and DfltSign
 
-type Arity = Int
+data EqnArity = ArityOne
+              | ArityN
+
+data Eqns = Eqns EqnArity [Eqn]
 
 -- A single equation for a function
-data Eqn = Eqn Arity [EPat] EAlts
+data Eqn = Eqn [EPat] EAlts
 --DEBUG  deriving (Show)
 
 instance NFData Eqn where
-  rnf (Eqn _ a b) = rnf a `seq` rnf b
+  rnf (Eqn a b) = rnf a `seq` rnf b
+
+instance NFData Eqns where
+  rnf (Eqns _ a) = rnf a
 
 data EAlts = EAlts [EAlt] [EBind]
 --DEBUG  deriving (Show)
@@ -510,8 +521,9 @@ getTupleConstr i =
     _ -> Nothing
 
 -- Create a tuple selector, component i (0 based) of n
+-- TODO: Artin: is ArityN correct here?
 mkTupleSel :: Int -> Int -> Expr
-mkTupleSel i n = eLam [ETuple [ EVar $ if k == i then x else dummyIdent | k <- [0 .. n - 1] ]] (EVar x)
+mkTupleSel i n = eLam ArityN [ETuple [ EVar $ if k == i then x else dummyIdent | k <- [0 .. n - 1] ]] (EVar x)
   where x = mkIdent "$x"
 
 eAppI :: Ident -> Expr -> Expr
@@ -615,8 +627,8 @@ instance HasLoc EStmt where
   getSLoc (SLet bs) = getSLoc bs
 
 instance HasLoc Eqn where
-  getSLoc (Eqn _ [] a) = getSLoc a
-  getSLoc (Eqn _ (p:_) _) = getSLoc p
+  getSLoc (Eqn [] a) = getSLoc a
+  getSLoc (Eqn (p:_) _) = getSLoc p
 
 instance HasLoc EAlts where
   getSLoc (EAlts as _) = getSLoc as
@@ -703,7 +715,7 @@ allVarsBind b = allVarsBind' b []
 allVarsBind' :: EBind -> DList Ident
 allVarsBind' abind =
   case abind of
-    Fcn i eqns -> (i:) . composeMap allVarsEqn eqns
+    Fcn i eqns -> (i:) . composeMap allVarsEqn (snd $ unEqns eqns)
     PatBind p e -> allVarsPat p . allVarsExpr' e
     Sign is _ -> (is ++)
     DfltSign i _ -> (i:)
@@ -716,7 +728,7 @@ allVarsEqns eqns = composeMap allVarsEqn eqns []
 allVarsEqn :: Eqn -> DList Ident
 allVarsEqn eqn =
   case eqn of
-    Eqn _ ps alts -> composeMap allVarsPat ps . allVarsAlts alts
+    Eqn ps alts -> composeMap allVarsPat ps . allVarsAlts alts
 
 allVarsAlts :: EAlts -> DList Ident
 allVarsAlts (EAlts alts bs) = composeMap allVarsAlt alts . composeMap allVarsBind' bs
@@ -736,7 +748,7 @@ allVarsExpr' aexpr =
     EVar i -> (i:)
     EApp e1 e2 -> allVarsExpr' e1 . allVarsExpr' e2
     EOper e1 ies -> allVarsExpr' e1 . composeMap (\ (i,e2) -> (i :) . allVarsExpr' e2) ies
-    ELam _ qs -> composeMap allVarsEqn qs
+    ELam _ qs -> composeMap allVarsEqn (snd $ unEqns qs)
     ELit _ _ -> id
     ECase e as -> allVarsExpr' e . composeMap allVarsCaseArm as
     ELet bs e -> composeMap allVarsBind' bs . allVarsExpr' e
@@ -855,7 +867,7 @@ ppEDef def =
     Data lhs cs ds -> text "data" <+> ppLHS lhs <+> text "=" <+> hsep (punctuate (text " |") (map ppConstr cs)) <+> ppDerivings ds
     Newtype lhs c ds -> text "newtype" <+> ppLHS lhs <+> text "=" <+> ppConstr c <+> ppDerivings ds
     Type lhs t -> text "type" <+> ppLHS lhs <+> text "=" <+> ppEType t
-    Fcn i eqns -> ppEqns (ppIdent i) (text "=") eqns
+    Fcn i eqns -> ppEqns (ppIdent i) (text "=") (snd $ unEqns eqns)
     PatBind p e -> ppEPat p <+> text "=" <+> ppExpr e
     Sign is t -> hsep (punctuate (text ",") (map ppIdent is)) <+> text "::" <+> ppEType t
     KindSign i t -> text "type" <+> ppIdent i <+> text "::" <+> ppEKind t
@@ -906,7 +918,7 @@ ppFunDeps fds =
   text "|" <+> hsep (punctuate (text ",") (map (\ (is, os) -> hsep (map ppIdent is) <+> text "-" <+> hsep (map ppIdent os)) fds))
 
 ppEqns :: Doc -> Doc -> [Eqn] -> Doc
-ppEqns name sepr = vcat . map (\ (Eqn _ ps alts) -> sep [name <+> hsep (map ppEPat ps), ppAlts sepr alts])
+ppEqns name sepr = vcat . map (\ (Eqn ps alts) -> sep [name <+> hsep (map ppEPat ps), ppAlts sepr alts])
 
 ppConstr :: Constr -> Doc
 ppConstr (MkGADTConstr i ety) = ppIdent i <+> text "::" <+> ppEType ety
@@ -967,7 +979,7 @@ ppExprR raw = ppE
                        cop = head op
         EApp _ _ -> ppApp [] ae
         EOper e ies -> ppE (foldl (\ e1 (i, e2) -> EApp (EApp (EVar i) e1) e2) e ies)
-        ELam _ qs -> parens $ text "\\" <> ppEqns empty (text "->") qs
+        ELam _ qs -> parens $ text "\\" <> ppEqns empty (text "->") (snd $ unEqns qs)
         ELit _ i -> text (showLit i)
         ECase e as -> text "case" <+> ppE e <+> text "of" $$ nest 2 (vcat (map ppCaseArm as))
         ELet bs e -> text "let" $$ nest 2 (vcat (map ppEBind bs)) $$ text "in" <+> ppE e

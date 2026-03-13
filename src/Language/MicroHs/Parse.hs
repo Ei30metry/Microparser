@@ -417,20 +417,19 @@ pDef =
 pCallConv :: P CallConv
 pCallConv = (Cccall <$ pKeyword "ccall") <|> (Ccapi <$ pKeyword "capi") <|> (Cjavascript <$ pKeyword "javascript")
 
-pPatSyn :: P (LHS, EPat, Maybe Eqns)
+pPatSyn :: P (LHS, EPat, Maybe [Eqn])
 pPatSyn = do
   lhs@(i, vs) <- pLHS
   ( do pSpec "=";
        p <- pPat
        guard (isExp p)
        let eqn = eEqn (map (EVar . idKindIdent) vs) p -- TODO: Artin: Is this right?
-           eqns = Eqns ArityN [eqn]
-       pure (lhs, p, Just eqns)
+       pure (lhs, p, Just [eqn])
    ) <|> (
     do pSymbol "<-"
        p <- pPat
        meqns <- optional (pKeyword "where" *> pBraces (pEqnsU i))
-       pure (lhs, p, fmap (Eqns ArityN . snd) meqns)
+       pure (lhs, p, fmap snd meqns)
    )
 
 dcolon :: P ()
@@ -761,10 +760,10 @@ pLam = do
     )
 
 eLamCase :: SLoc -> [ECaseArm] -> Expr
-eLamCase loc as = ELam loc (Eqns ArityOne [ Eqn [p] a | (p, a) <- as ])
+eLamCase loc as = ELam loc (LamEqns ArityOne [ Eqn [p] a | (p, a) <- as ])
 
 eLamCases :: SLoc -> [([EPat], EAlts)] -> Expr
-eLamCases loc as = ELam loc (Eqns ArityN [ Eqn ps a | (ps, a) <- as ])
+eLamCases loc as = ELam loc (LamEqns ArityN [ Eqn ps a | (ps, a) <- as ])
 
 pCase :: P Expr
 pCase = ECase <$> (pKeyword "case" *> pExpr) <*> (pKeyword "of" *> pBlock pCaseArm)
@@ -891,7 +890,7 @@ pBind =
 -- Bindings allowed in top level, let, class
 pBind' :: P EBind
 pBind' =
-      (\(idt, eqs) -> Fcn idt (Eqns ArityN eqs)) <$> pEqns
+      uncurry Fcn <$> pEqns
   <|> Sign        <$> (sepBy1 pLIdentSym (pSpec ",") <* dcolon) <*> pType
   <|> Infix       <$> ((,) <$> pAssoc <*> pPrec) <*> sepBy1 pTypeOper (pSpec ",")
   where
@@ -909,7 +908,7 @@ pClsBind =
 -- Bindings allowed in an instance definition
 pInstBind :: P EBind
 pInstBind =
-      (\(idt, eqs) -> Fcn idt (Eqns ArityN eqs)) <$> pEqns
+      uncurry Fcn <$> pEqns
   <|> Sign        <$> (sepBy1 pLIdentSym (pSpec ",") <* dcolon) <*> pType
 
 -------------

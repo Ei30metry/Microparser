@@ -66,7 +66,7 @@ lexTests verbose
                    defaultLexer test)
 
 type ESign         = ([I.Ident], E.EType)
-type EFunBn        = (I.Ident, E.Eqns)
+type EFunBn        = (I.Ident, [E.Eqn])
 type EData         = (E.LHS, [E.Constr])
 type EKindSig      = (I.Ident, E.EType)
 type EGammaTyCon   = (I.Ident, E.EType)
